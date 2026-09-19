@@ -32,17 +32,14 @@
   }
   .step-badge b{color:var(--accent2); font-size:18px;}
 
-  .layout{display:grid; grid-template-columns:280px 1fr; gap:16px; width:100%; max-width:1200px;}
+  .layout{display:grid; grid-template-columns:340px 1fr; gap:16px; width:100%; max-width:1200px;}
   @media(max-width:800px){.layout{grid-template-columns:1fr;}}
-  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px;}
-  .panel h2{margin:0 0 12px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:28px;}
+  .panel h2{margin:0 0 22px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
 
-  .sliderRow{margin-bottom:14px;}
-  .sliderRow label{display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:4px;}
+  .sliderRow{margin-bottom:32px;}
+  .sliderRow label{display:flex; justify-content:space-between; font-size:14px; color:var(--muted); margin-bottom:10px;}
   .sliderRow label b{color:var(--accent2); font-variant-numeric:tabular-nums;}
-
-  .toggleRow{display:flex; align-items:center; gap:8px; margin:14px 0; font-size:13px; color:var(--muted);}
-  .toggleRow input{accent-color:var(--good);}
 
   svg{width:100%; height:auto; display:block; background:#0a1220; border-radius:8px;}
   .grid-line{stroke:var(--border); stroke-width:1;}
@@ -54,7 +51,7 @@
   .cold-line{stroke:var(--cold); stroke-width:2.4; fill:none;}
   .cold-dot{fill:var(--cold); stroke:#0a1220; stroke-width:1;}
 
-  .cupRow{display:flex; gap:16px; justify-content:center; margin-top:14px;}
+  .cupRow{display:flex; gap:16px; justify-content:center; margin-top:30px;}
   .cup{text-align:center;}
   .cup .emoji{font-size:38px; display:block;}
   .cup .temp{font-size:20px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:4px;}
@@ -62,7 +59,7 @@
   .cup.coldCup .temp{color:var(--cold);}
   .cup .label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;}
 
-  .formula{text-align:center; font-size:15px; margin-top:12px; color:var(--good); font-family:'Cambria Math',serif;}
+  .formula{text-align:center; font-size:15px; margin-top:26px; color:var(--good); font-family:'Cambria Math',serif;}
 
   .attractorNote{
     margin-top:14px; font-size:13px; color:var(--muted); background:#0a1220; border:1px solid var(--border);
@@ -73,18 +70,19 @@
 </head>
 <body>
 
-<h1>☕ Stygnięcie jako rozpad różnicy</h1>
+<h1>☕ Stygnięcie i rekurencje temperatury</h1>
 <p class="sub">Prawo stygnięcia Newtona: szybkość zmiany temperatury ciała jest proporcjonalna do różnicy między nim
-a otoczeniem. Włącz obie filiżanki naraz — jedną gorącą, jedną mrożoną — i zobacz, że niezależnie z której strony
-zaczynasz, obie zbiegają do tej samej temperatury otoczenia.</p>
+a otoczeniem. Ustaw temperaturę początkową ciała i zobacz, jak niezależnie od punktu startu temperatura zbiega do
+temperatury otoczenia.</p>
 
 <div class="controls">
   <button id="btnPlay">▶ Odtwórz</button>
+  <button id="btnBack" class="secondary">← Krok</button>
   <button id="btnStep" class="secondary">Krok →</button>
   <button id="btnReset" class="secondary">⟲ Reset</button>
   <div class="sliderGroup">
     Prędkość:
-    <input type="range" id="speedRange" min="150" max="1500" value="450" step="50">
+    <input type="range" id="speedRange" min="150" max="1500" value="1200" step="50">
   </div>
   <div class="step-badge">Krok n = <b id="stepNum">0</b></div>
 </div>
@@ -95,36 +93,22 @@ zaczynasz, obie zbiegają do tej samej temperatury otoczenia.</p>
 
     <div class="sliderRow">
       <label>współczynnik przewodnictwa k <b id="kVal">0.15</b></label>
-      <input type="range" id="kSlider" min="0.02" max="0.6" step="0.01" value="0.15">
+      <input type="range" id="kSlider" min="0" max="1" step="0.01" value="0.15">
     </div>
     <div class="sliderRow">
       <label>temperatura otoczenia T<sub>otocz.</sub> <b id="ambVal">20°C</b></label>
-      <input type="range" id="ambSlider" min="0" max="35" step="1" value="20">
+      <input type="range" id="ambSlider" min="-10" max="40" step="1" value="20">
     </div>
     <div class="sliderRow">
-      <label>gorąca kawa – start <b id="hotStartVal">95°C</b></label>
-      <input type="range" id="hotStartSlider" min="40" max="100" step="1" value="95">
-    </div>
-
-    <div class="toggleRow">
-      <input type="checkbox" id="coldToggle" checked>
-      <label for="coldToggle">pokaż też mrożoną kawę (start 5°C) — eksperyment myślowy z konspektu</label>
-    </div>
-    <div class="sliderRow" id="coldStartRow">
-      <label>mrożona kawa – start <b id="coldStartVal">5°C</b></label>
-      <input type="range" id="coldStartSlider" min="0" max="20" step="1" value="5">
+      <label>temperatura początkowa ciała T<sub>0</sub> <b id="hotStartVal">95°C</b></label>
+      <input type="range" id="hotStartSlider" min="-20" max="100" step="1" value="95">
     </div>
 
     <div class="cupRow">
-      <div class="cup hotCup">
+      <div class="cup hotCup" id="cupBody">
         <span class="emoji">☕</span>
         <span class="temp" id="hotTempNow">95°C</span>
-        <span class="label">gorąca</span>
-      </div>
-      <div class="cup coldCup" id="coldCupBox">
-        <span class="emoji">🧊</span>
-        <span class="temp" id="coldTempNow">5°C</span>
-        <span class="label">mrożona</span>
+        <span class="label">ciało</span>
       </div>
     </div>
 
@@ -135,7 +119,7 @@ zaczynasz, obie zbiegają do tej samej temperatury otoczenia.</p>
     <h2>Zbieganie do temperatury otoczenia</h2>
     <svg id="coolChart" viewBox="0 0 640 300"></svg>
     <div class="attractorNote">
-      Niezależnie czy zaczynasz od 95°C czy od 5°C, obie krzywe lądują dokładnie w tym samym miejscu:
+      Niezależnie od temperatury początkowej ciała krzywa ląduje dokładnie w tym samym miejscu:
       <b id="ambientNoteVal">20°C</b>. Temperatura otoczenia to <b>stabilny stan stacjonarny</b> — system zostaje do niego
       „przyciągnięty” z dowolnej strony.
     </div>
@@ -151,6 +135,7 @@ let timer = null;
 
 const stepNum = document.getElementById('stepNum');
 const btnPlay = document.getElementById('btnPlay');
+const btnBack = document.getElementById('btnBack');
 const btnStep = document.getElementById('btnStep');
 const btnReset = document.getElementById('btnReset');
 const speedRange = document.getElementById('speedRange');
@@ -161,14 +146,9 @@ const ambSlider = document.getElementById('ambSlider');
 const ambVal = document.getElementById('ambVal');
 const hotStartSlider = document.getElementById('hotStartSlider');
 const hotStartVal = document.getElementById('hotStartVal');
-const coldStartSlider = document.getElementById('coldStartSlider');
-const coldStartVal = document.getElementById('coldStartVal');
-const coldToggle = document.getElementById('coldToggle');
-const coldStartRow = document.getElementById('coldStartRow');
-const coldCupBox = document.getElementById('coldCupBox');
 
 const hotTempNow = document.getElementById('hotTempNow');
-const coldTempNow = document.getElementById('coldTempNow');
+const cupBody = document.getElementById('cupBody');
 const ambientNoteVal = document.getElementById('ambientNoteVal');
 const coolChart = document.getElementById('coolChart');
 
@@ -187,36 +167,34 @@ function seriesFor(start, k, amb, steps){
 function render(){
   const k = Number(kSlider.value);
   const amb = Number(ambSlider.value);
-  const hotStart = Number(hotStartSlider.value);
-  const coldStart = Number(coldStartSlider.value);
-  const showCold = coldToggle.checked;
+  const start = Number(hotStartSlider.value);
 
   kVal.textContent = k.toFixed(2);
   ambVal.textContent = amb + '°C';
-  hotStartVal.textContent = hotStart + '°C';
-  coldStartVal.textContent = coldStart + '°C';
+  hotStartVal.textContent = start + '°C';
   ambientNoteVal.textContent = amb + '°C';
-  coldStartRow.style.display = showCold ? 'block' : 'none';
-  coldCupBox.style.display = showCold ? '' : 'none';
 
-  const hotSeq = seriesFor(hotStart, k, amb, MAX_N);
-  const coldSeq = showCold ? seriesFor(coldStart, k, amb, MAX_N) : null;
+  const seq = seriesFor(start, k, amb, MAX_N);
+  const isCold = start < 0;
 
   stepNum.textContent = n;
-  hotTempNow.textContent = hotSeq[n].toFixed(1) + '°C';
-  if (showCold) coldTempNow.textContent = coldSeq[n].toFixed(1) + '°C';
+  hotTempNow.textContent = seq[n].toFixed(1) + '°C';
+  cupBody.className = 'cup ' + (isCold ? 'coldCup' : 'hotCup');
 
-  drawChart(hotSeq, coldSeq, amb);
+  drawChart(seq, amb, isCold);
 
+  btnBack.disabled = n <= 0;
   btnStep.disabled = n >= MAX_N;
   if (n >= MAX_N && playing) stopPlay();
 }
 
-function drawChart(hotSeq, coldSeq, amb){
+function drawChart(seq, amb, isCold){
   coolChart.innerHTML = '';
   const W = 640, H = 300, padL = 44, padR = 14, padT = 14, padB = 26;
+  const lineClass = isCold ? 'cold-line' : 'hot-line';
+  const dotClass = isCold ? 'cold-dot' : 'hot-dot';
 
-  const allVals = coldSeq ? hotSeq.concat(coldSeq) : hotSeq.slice();
+  const allVals = seq.slice();
   allVals.push(amb);
   const maxVal = Math.max(...allVals) + 4;
   const minVal = Math.min(...allVals) - 4;
@@ -239,31 +217,30 @@ function drawChart(hotSeq, coldSeq, amb){
   coolChart.appendChild(makeSVG('text', {x:2, y:padT+4, class:'axis-label'})).textContent = Math.round(maxVal) + '°C';
   coolChart.appendChild(makeSVG('text', {x:2, y:H-padB, class:'axis-label'})).textContent = Math.round(minVal) + '°C';
 
-  function drawSeries(seq, lineClass, dotClass){
-    let path = '';
-    for (let i = 0; i <= n; i++){
-      const x = xFor(i), y = yFor(seq[i]);
-      path += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
-    }
-    coolChart.appendChild(makeSVG('path', {d:path.trim(), class:lineClass}));
-    for (let i = 0; i <= n; i++){
-      const x = xFor(i), y = yFor(seq[i]);
-      coolChart.appendChild(makeSVG('circle', {cx:x, cy:y, r: i===n ? 4.5 : 2.5, class:dotClass}));
-    }
+  let path = '';
+  for (let i = 0; i <= n; i++){
+    const x = xFor(i), y = yFor(seq[i]);
+    path += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
   }
-
-  drawSeries(hotSeq, 'hot-line', 'hot-dot');
-  if (coldSeq) drawSeries(coldSeq, 'cold-line', 'cold-dot');
+  coolChart.appendChild(makeSVG('path', {d:path.trim(), class:lineClass}));
+  for (let i = 0; i <= n; i++){
+    const x = xFor(i), y = yFor(seq[i]);
+    coolChart.appendChild(makeSVG('circle', {cx:x, cy:y, r: i===n ? 4.5 : 2.5, class:dotClass}));
+  }
 }
 
 function step(){
   if (n < MAX_N){ n++; render(); }
   else stopPlay();
 }
+function stepBack(){
+  if (n > 0){ n--; render(); }
+}
 function startPlay(){
   playing = true;
   btnPlay.textContent = '⏸ Pauza';
-  timer = setInterval(step, Number(speedRange.value));
+  // suwak: w lewo = wolno (długi interwał), w prawo = szybko
+  timer = setInterval(step, Number(speedRange.min) + Number(speedRange.max) - Number(speedRange.value));
 }
 function stopPlay(){
   playing = false;
@@ -272,12 +249,12 @@ function stopPlay(){
 }
 
 btnPlay.addEventListener('click', () => playing ? stopPlay() : startPlay());
+btnBack.addEventListener('click', () => { stopPlay(); stepBack(); });
 btnStep.addEventListener('click', () => { stopPlay(); step(); });
 btnReset.addEventListener('click', () => { stopPlay(); n = 0; render(); });
 speedRange.addEventListener('input', () => { if (playing){ stopPlay(); startPlay(); } });
 
-[kSlider, ambSlider, hotStartSlider, coldStartSlider].forEach(s => s.addEventListener('input', () => { stopPlay(); n = 0; render(); }));
-coldToggle.addEventListener('change', render);
+[kSlider, ambSlider, hotStartSlider].forEach(s => s.addEventListener('input', () => { stopPlay(); n = 0; render(); }));
 
 render();
 </script>

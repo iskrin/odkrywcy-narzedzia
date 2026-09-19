@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Czas połowicznego rozpadu</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --border:#2a3348; --text:#e8ecf5;
+    --muted:#8a93a8; --accent:#5ec2ff; --accent2:#ffd166; --good:#6fdb8f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text);
+    display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px;
+  }
+  h1{font-size:28px; margin:0 0 4px;}
+  .sub{color:var(--muted); margin:0 0 20px; text-align:center; max-width:860px; line-height:1.5;}
+
+  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; width:100%; max-width:720px;}
+  .sliderGroup{display:flex; align-items:center; gap:10px; color:var(--muted); font-size:15px; width:100%;}
+  .sliderGroup input[type=range]{flex:1;}
+  .sliderGroup b{color:var(--accent2); font-variant-numeric:tabular-nums; min-width:48px; text-align:right; font-size:16px;}
+  input[type=range]{accent-color:var(--accent);}
+
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:22px; width:100%; max-width:1100px;}
+  .panel h2{margin:0 0 14px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
+
+  svg{width:100%; height:auto; display:block; background:#0a1220; border-radius:8px;}
+  .grid-line{stroke:var(--border); stroke-width:1;}
+  .axis-label{fill:var(--muted); font-size:14px;}
+  .half-line{stroke:var(--accent2); stroke-width:2; stroke-dasharray:7 6;}
+  .half-text{fill:var(--accent2); font-size:15px; font-weight:600;}
+  .decay-line{stroke:var(--accent); stroke-width:3; fill:none;}
+  .decay-dot{fill:var(--accent); stroke:#0a1220; stroke-width:1.5;}
+  .zero-line{stroke:var(--good); stroke-width:2; stroke-dasharray:3 4;}
+  .zero-text{fill:var(--good); font-size:15px; font-weight:600;}
+
+  .formula{text-align:center; font-size:15px; margin-top:12px; color:var(--good); font-family:'Cambria Math',serif;}
+
+  .attractorNote{
+    margin-top:12px; font-size:13px; color:var(--muted); background:#0a1220; border:1px solid var(--border);
+    border-radius:8px; padding:10px 12px; line-height:1.5;
+  }
+  .attractorNote b{color:var(--good);}
+</style>
+</head>
+<body>
+
+<h1>☢️ Czas połowicznego rozpadu</h1>
+<p class="sub">Startujemy od x<sub>0</sub> = 1 — jeden „zapas” atomów węgla <sup>14</sup>C. W każdym kroku zostaje stały
+ułamek q poprzedniego stanu, a reszta się rozpada. Dla q &lt; 1 zero jest punktem, do którego system nieuchronnie
+zmierza — <b>atraktorem</b>.</p>
+
+<div class="controls">
+  <div class="sliderGroup">
+    współczynnik q:
+    <input type="range" id="qSlider" min="0.01" max="1" step="0.01" value="0.9">
+    <b id="qVal">0.90</b>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Zanik wykładniczy</h2>
+  <svg id="decayChart" viewBox="0 0 1000 440"></svg>
+  <div class="formula">x<sub>n</sub> = q · x<sub>n-1</sub>, &nbsp; x<sub>0</sub> = 1</div>
+  <div class="attractorNote">
+    Dla q &lt; 1 populacja nieuchronnie dąży do <b>zera</b> — im mniejsze q, tym szybciej.
+    Gdy q = 1, stan się nie zmienia i wykres pozostaje na poziomie 1.
+  </div>
+</div>
+
+<script>
+const X0 = 1;
+const MAX_N = 60;
+
+let q = 0.9;
+
+const qSlider = document.getElementById('qSlider');
+const qVal = document.getElementById('qVal');
+const decayChart = document.getElementById('decayChart');
+
+function seriesFor(q, upTo){
+  const arr = [X0];
+  for (let i = 1; i <= upTo; i++) arr.push(arr[i - 1] * q);
+  return arr;
+}
+
+function makeSVG(tag, attrs){
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+function renderChart(seq){
+  decayChart.innerHTML = '';
+  const W = 1000, H = 440, padL = 70, padR = 26, padT = 26, padB = 58;
+  const maxVal = X0;
+  const last = seq.length - 1;
+  const xFor = i => padL + (i / last) * (W - padL - padR);
+  const yFor = v => H - padB - (v / maxVal) * (H - padT - padB);
+
+  for (let g = 0; g <= 4; g++){
+    const y = padT + g * (H - padT - padB) / 4;
+    decayChart.appendChild(makeSVG('line', {x1:padL, y1:y, x2:W-padR, y2:y, class:'grid-line'}));
+  }
+
+  // oś pozioma + oznaczenia kroków n
+  decayChart.appendChild(makeSVG('line', {x1:padL, y1:H-padB, x2:W-padR, y2:H-padB, class:'grid-line'}));
+  const STEP_TICK = 5;
+  for (let i = 0; i <= last; i += STEP_TICK){
+    const x = xFor(i);
+    decayChart.appendChild(makeSVG('line', {x1:x, y1:H-padB, x2:x, y2:H-padB+9, class:'grid-line'}));
+    const tick = makeSVG('text', {
+      x, y:H-padB+28, class:'axis-label',
+      'text-anchor': i === 0 ? 'start' : i === last ? 'end' : 'middle'
+    });
+    tick.textContent = 'n=' + i;
+    decayChart.appendChild(tick);
+  }
+
+  // linia połowy stanu
+  const halfY = yFor(maxVal / 2);
+  decayChart.appendChild(makeSVG('line', {x1:padL, y1:halfY, x2:W-padR, y2:halfY, class:'half-line'}));
+  const halfText = makeSVG('text', {x:W-padR, y:halfY-6, class:'half-text', 'text-anchor':'end'});
+  halfText.textContent = '50% (0.5)';
+  decayChart.appendChild(halfText);
+
+  // linia zera / atraktora
+  const zeroY = yFor(0);
+  decayChart.appendChild(makeSVG('line', {x1:padL, y1:zeroY, x2:W-padR, y2:zeroY, class:'zero-line'}));
+  const zeroText = makeSVG('text', {x:W-padR, y:zeroY-6, class:'zero-text', 'text-anchor':'end'});
+  zeroText.textContent = 'atraktor: 0';
+  decayChart.appendChild(zeroText);
+
+  decayChart.appendChild(makeSVG('text', {x:8, y:padT+6, class:'axis-label'})).textContent = '1';
+  decayChart.appendChild(makeSVG('text', {x:8, y:H-padB, class:'axis-label'})).textContent = '0';
+
+  let path = '';
+  for (let i = 0; i <= last; i++){
+    const x = xFor(i), y = yFor(seq[i]);
+    path += (i === 0 ? 'M' : 'L') + x + ',' + y + ' ';
+  }
+  decayChart.appendChild(makeSVG('path', {d:path.trim(), class:'decay-line'}));
+  for (let i = 0; i <= last; i++){
+    const x = xFor(i), y = yFor(seq[i]);
+    decayChart.appendChild(makeSVG('circle', {cx:x, cy:y, r: i===last ? 7 : 4, class:'decay-dot'}));
+  }
+}
+
+function render(){
+  const seq = seriesFor(q, MAX_N);
+  renderChart(seq);
+}
+
+qSlider.addEventListener('input', () => {
+  q = Number(qSlider.value);
+  qVal.textContent = q.toFixed(2);
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

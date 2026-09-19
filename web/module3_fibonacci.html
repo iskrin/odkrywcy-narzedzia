@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Drzewo rodowe królików Fibonacciego</title>
+<style>
+  :root{
+    --bg:#0f1420; --panel:#171e2e; --border:#2a3348; --text:#e8ecf5;
+    --muted:#8a93a8; --accent:#5ec2ff; --accent2:#ffd166; --good:#6fdb8f; --mature:#7f8aa3;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text);
+    display:flex; flex-direction:column; align-items:center; padding:24px 16px 60px;
+  }
+  h1{font-size:28px; margin:0 0 4px;}
+  .sub{color:var(--muted); margin:0 0 20px; text-align:center; max-width:760px; line-height:1.5;}
+
+  .controls{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:18px; width:100%; max-width:1200px;}
+  button{
+    background:var(--accent); color:#0a1220; border:none; padding:10px 18px; border-radius:8px;
+    font-weight:600; cursor:pointer; font-size:14px;
+  }
+  button:hover{filter:brightness(1.1);}
+  button.secondary{background:var(--border); color:var(--text);}
+  button:disabled{opacity:.4; cursor:default;}
+  .speed{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px;}
+  input[type=range]{accent-color:var(--accent);}
+  .step-badge{
+    margin-left:auto; background:#0a1220; border:1px solid var(--border); border-radius:8px;
+    padding:8px 16px; font-variant-numeric:tabular-nums; font-size:14px;
+  }
+  .step-badge b{color:var(--accent2); font-size:18px;}
+
+  .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:22px; width:100%; max-width:1200px;}
+  .panel h2{margin:0 0 14px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
+
+  .legend{display:flex; gap:20px; flex-wrap:wrap; align-items:center; margin-top:12px; font-size:12px; color:var(--muted);}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .dot{width:12px; height:12px; border-radius:50%; display:inline-block;}
+  .dot.a{background:var(--accent2);}
+  .dot.b{background:var(--mature);}
+  .dot.label{background:transparent; border:1px solid var(--muted); color:var(--muted); border-radius:5px; width:auto; height:auto; padding:1px 7px; font-size:11px; font-weight:700;}
+
+  .tree-wrap{position:relative;}
+  #treeChart{
+    height:460px; width:100%; background:#0a1220; border-radius:8px; display:block;
+    cursor:grab; touch-action:none; user-select:none;
+  }
+  #treeChart.panning{cursor:grabbing;}
+  .tree-tools{
+    position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:6px;
+  }
+  .tree-tools button{
+    width:34px; height:34px; padding:0; font-size:16px; line-height:1; border-radius:8px;
+    background:rgba(15,20,32,.78); border:1px solid var(--border); color:var(--text); font-weight:700;
+  }
+  .tree-tools button:hover{border-color:var(--accent); color:var(--accent);}
+  .tree-hint{margin-top:8px; font-size:12px; color:var(--muted);}
+  .tree-edge{stroke:var(--border); stroke-width:1.4;}
+  .tree-node-mature{fill:var(--mature);}
+  .tree-node-young{fill:var(--accent2);}
+  .tree-node{stroke:#0a1220; stroke-width:.6;}
+  .tree-node-label{fill:#0a1220; font-weight:700; text-anchor:middle; pointer-events:none; font-variant-numeric:tabular-nums;}
+  .tree-node-hit{fill:transparent; cursor:pointer;}
+  .tree-row-label{
+    fill:var(--muted); font-size:10px; text-anchor:start; font-weight:600;
+    paint-order:stroke; stroke:rgba(10,18,32,.85); stroke-width:3px; stroke-linejoin:round;
+  }
+  .tree-node-selected-ring{fill:none; stroke:var(--accent); stroke-width:2.5;}
+  .tree-history-ring{fill:none; stroke:var(--good); stroke-width:2; stroke-dasharray:3 2;}
+  .tree-edge-highlight{stroke:var(--good); stroke-width:2.4;}
+  .tree-node-child-highlight{fill:none; stroke:var(--good); stroke-width:2;}
+  #treeInfo{
+    margin-top:12px; font-size:13.5px; color:var(--muted); background:#0a1220;
+    border:1px solid var(--border); border-radius:8px; padding:12px 14px; min-height:20px; line-height:1.55;
+  }
+  #treeInfo b{color:var(--good);}
+  #treeInfo .id{color:var(--accent2);}
+  .formula{
+    text-align:center; font-size:15px; margin-top:14px; color:var(--good); font-family:'Cambria Math',serif;
+  }
+</style>
+</head>
+<body>
+
+<h1>🐇 Ile będzie królików?</h1>
+<p class="sub">Para królików dojrzewa 1 krok, każda dojrzała para rodzi 1 nową parę co krok, króliki nigdy nie umierają.
+Każda para ma swój stały numer — kliknij jej kropkę w drzewie i prześledź całą jej historię.</p>
+
+<div class="controls">
+  <button id="btnPlay">▶ Odtwórz</button>
+  <button id="btnBack" class="secondary">← Krok</button>
+  <button id="btnStep" class="secondary">Krok →</button>
+  <button id="btnReset" class="secondary">⟲ Reset</button>
+  <div class="speed">
+    Prędkość:
+    <input type="range" id="speedRange" min="300" max="2000" value="1400" step="100">
+  </div>
+  <div class="step-badge">Krok n = <b id="stepNum">0</b> &nbsp;|&nbsp; Populacja = <b id="popNum">1</b> par</div>
+</div>
+
+<div class="panel">
+  <h2>Drzewo rodowe królików</h2>
+  <div class="tree-wrap">
+    <svg id="treeChart" preserveAspectRatio="xMidYMid meet"></svg>
+    <div class="tree-tools">
+      <button id="zoomIn" title="Przybliż">＋</button>
+      <button id="zoomOut" title="Oddal">－</button>
+      <button id="zoomFit" title="Dopasuj do okna">⤢</button>
+    </div>
+  </div>
+  <div class="tree-hint">Kółko myszy = zoom w miejscu kursora · przeciągnij, aby przesunąć drzewo.</div>
+  <div class="legend">
+    <span><span class="dot a"></span>młoda para (jeszcze niedojrzała)</span>
+    <span><span class="dot b"></span>dojrzała para (już się rozmnaża)</span>
+    <span><span class="dot label">#</span>numer pary — stały przez całe jej życie</span>
+  </div>
+  <div id="treeInfo">Kliknij dowolną kropkę, żeby podświetlić całą historię tej pary i zobaczyć jej numer.</div>
+  <div class="formula">x<sub>n</sub> = x<sub>n-1</sub> + x<sub>n-2</sub></div>
+</div>
+
+<script>
+const TREE_MAX_N = 9; // x_9 = 55 par — tyle pokazujemy; zoom i przesuwanie pomagają się połapać
+
+// Prekalkuluj ciąg Fibonacciego: x0=1, x1=1, x2=2, ...
+const seq = [1, 1];
+for (let i = 2; i <= TREE_MAX_N; i++) seq.push(seq[i-1] + seq[i-2]);
+
+let n = 0; // aktualny krok wyświetlany (index w seq)
+let playing = false;
+let timer = null;
+
+const stepNum = document.getElementById('stepNum');
+const popNum = document.getElementById('popNum');
+const btnPlay = document.getElementById('btnPlay');
+const btnBack = document.getElementById('btnBack');
+const btnStep = document.getElementById('btnStep');
+const btnReset = document.getElementById('btnReset');
+const speedRange = document.getElementById('speedRange');
+
+const treeSvg = document.getElementById('treeChart');
+const zoomInBtn = document.getElementById('zoomIn');
+const zoomOutBtn = document.getElementById('zoomOut');
+const zoomFitBtn = document.getElementById('zoomFit');
+
+let baseVB = null; // viewBox dopasowany do całego drzewa
+let vb = null;     // aktualny viewBox (po zoomie / przesunięciu)
+let didPan = false;
+let rowLabelEls = []; // etykiety podziałki n (przypięte do lewej krawędzi)
+
+function applyViewBox(){
+  if (vb) treeSvg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+  syncAxis();
+}
+
+// Podziałka n: etykiety zostają na lewej krawędzi okna i mają stały rozmiar
+// na ekranie, niezależnie od zoomu i przesunięcia.
+function syncAxis(){
+  if (!vb || !rowLabelEls.length) return;
+  const cw = treeSvg.clientWidth || 1;
+  const ch = treeSvg.clientHeight || 1;
+  const scale = Math.min(cw / vb.w, ch / vb.h) || 1;
+  const visibleW = cw / scale;
+  const visibleLeft = vb.x + (vb.w - visibleW) / 2; // przy "meet" treść bywa wyśrodkowana
+  const fontSize = 12 / scale;
+  for (const el of rowLabelEls){
+    el.setAttribute('x', visibleLeft + 8 / scale);
+    el.style.fontSize = fontSize + 'px';
+  }
+}
+
+function clientToUser(clientX, clientY){
+  const pt = treeSvg.createSVGPoint();
+  pt.x = clientX; pt.y = clientY;
+  const m = treeSvg.getScreenCTM();
+  if (!m) return {x: clientX, y: clientY};
+  const p = pt.matrixTransform(m.inverse());
+  return {x: p.x, y: p.y};
+}
+
+// Zoom w punkcie (cx, cy) wyrażonym we współrzędnych drzewa.
+function zoomAt(factor, cx, cy){
+  if (!vb || !baseVB) return;
+  const minW = baseVB.w / 30, maxW = baseVB.w;
+  const newW = Math.min(Math.max(vb.w / factor, minW), maxW);
+  const newH = newW * (baseVB.h / baseVB.w);
+  const k = newW / vb.w;
+  vb.x = cx - (cx - vb.x) * k;
+  vb.y = cy - (cy - vb.y) * k;
+  vb.w = newW;
+  vb.h = newH;
+  applyViewBox();
+}
+
+function resetView(){
+  if (!baseVB) return;
+  vb = {...baseVB};
+  applyViewBox();
+}
+
+function makeSVG(tag, attrs){
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const k in attrs) el.setAttribute(k, attrs[k]);
+  return el;
+}
+
+// Drzewo rodowe: młoda para (Y) w kolejnym kroku dojrzewa (M) -> ta sama para.
+// Dojrzała para (M) w kolejnym kroku zostaje dojrzała (ta sama para) i rodzi
+// nową młodą parę (nowy numer) -> 2 dzieci. Numer pary jest stały przez całe życie.
+function buildTree(targetN){
+  let nextId = 1;
+  function make(gen, status, id){
+    const nd = {id, gen, status, children: []};
+    if (gen === targetN) return nd;
+    if (status === 'Y'){
+      nd.children = [make(gen + 1, 'M', id)];
+    } else {
+      const childId = ++nextId;
+      nd.children = [make(gen + 1, 'M', id), make(gen + 1, 'Y', childId)];
+    }
+    return nd;
+  }
+  return make(0, 'Y', nextId);
+}
+
+function layoutTree(root){
+  const counter = {x: 0};
+  function walk(nd, depth){
+    nd.depth = depth;
+    if (nd.children.length === 0){
+      nd.x = counter.x;
+      counter.x += 1;
+    } else {
+      nd.children.forEach(c => walk(c, depth + 1));
+      nd.x = (nd.children[0].x + nd.children[nd.children.length - 1].x) / 2;
+    }
+  }
+  walk(root, 0);
+  return counter.x; // leafCount
+}
+
+function describeNode(nd, chain){
+  const info = document.getElementById('treeInfo');
+  const gens = chain.map(c => c.gen);
+  const firstGen = Math.min(...gens);
+  const lastGen = Math.max(...gens);
+
+  let msg = `Para <b class="id">#${nd.id}</b> — ${nd.status === 'Y' ? 'młoda' : 'dojrzała'}, pokolenie n=${nd.gen}. `;
+  msg += `Historia: jako młoda w n=${firstGen}`;
+  if (lastGen > firstGen) msg += `, dojrzała od n=${firstGen + 1} do n=${lastGen}`;
+  msg += '. ';
+
+  const newPair = nd.children.find(c => c.id !== nd.id);
+  if (newPair){
+    msg += `W n=${newPair.gen} rodzi nową parę <b class="id">#${newPair.id}</b>.`;
+  } else if (nd.gen < TREE_MAX_N){
+    msg += `W n=${nd.gen + 1} tylko dojrzeje — nadal ta sama para.`;
+  } else {
+    msg += `To ostatni pokazany krok.`;
+  }
+  info.innerHTML = msg;
+}
+
+function renderTree(){
+  const svg = document.getElementById('treeChart');
+
+  svg.innerHTML = '';
+
+  const root = buildTree(n);
+  const leafCount = layoutTree(root);
+
+  const leafSpacing = 30, rowHeight = 46, marginLeft = 46, marginTop = 18, marginBottom = 18, marginRight = 18;
+  const W = marginLeft + Math.max(leafCount, 1) * leafSpacing + marginRight;
+  const H = marginTop + (n + 1) * rowHeight + marginBottom;
+  baseVB = {x: 0, y: 0, w: W, h: H};
+  vb = {...baseVB};
+
+  const xOf = nd => marginLeft + nd.x * leafSpacing + leafSpacing / 2;
+  const yOf = nd => marginTop + nd.depth * rowHeight + rowHeight / 2;
+
+  // etykiety rzędów (pokoleń) — podziałka n przypięta do lewej krawędzi
+  rowLabelEls = [];
+  for (let g = 0; g <= n; g++){
+    const lbl = makeSVG('text', {
+      x: marginLeft, y: marginTop + g * rowHeight + rowHeight / 2,
+      class: 'tree-row-label', 'dominant-baseline': 'central'
+    });
+    lbl.textContent = 'n=' + g;
+    svg.appendChild(lbl);
+    rowLabelEls.push(lbl);
+  }
+  applyViewBox();
+
+  const nodeRadius = leafCount > 150 ? 2.2 : leafCount > 80 ? 3.2 : leafCount > 40 ? 5.5 : 8;
+  const showLabels = true; // numery par zawsze rysowane — zoom pozwala je odczytać
+  const hitRadius = Math.max(nodeRadius, 8);
+
+  // krawędzie i węzły (rekurencyjnie, krawędzie najpierw żeby węzły były na wierzchu)
+  const edgeParts = [];
+  const nodeEls = [];
+  const history = new Map(); // id pary -> wszystkie jej węzły w kolejnych pokoleniach
+  function collect(nd){
+    for (const c of nd.children){
+      edgeParts.push(`M${xOf(nd)},${yOf(nd)} L${xOf(c)},${yOf(c)}`);
+      collect(c);
+    }
+    nodeEls.push(nd);
+    if (!history.has(nd.id)) history.set(nd.id, []);
+    history.get(nd.id).push(nd);
+  }
+  collect(root);
+
+  svg.appendChild(makeSVG('path', {d: edgeParts.join(' '), class: 'tree-edge', fill: 'none'}));
+
+  const highlightLayer = makeSVG('g', {id: 'treeHighlightLayer'});
+
+  function selectNode(nd){
+    if (didPan) return;
+    highlightLayer.innerHTML = '';
+    const chain = history.get(nd.id) || [];
+    // cała historia pary: wszystkie pokolenia z tym samym numerem
+    for (const c of chain){
+      highlightLayer.appendChild(makeSVG('circle', {
+        cx: xOf(c), cy: yOf(c), r: nodeRadius + 3.5, class: 'tree-history-ring'
+      }));
+    }
+    highlightLayer.appendChild(makeSVG('circle', {
+      cx: xOf(nd), cy: yOf(nd), r: nodeRadius + 6, class: 'tree-node-selected-ring'
+    }));
+    for (const c of nd.children){
+      highlightLayer.appendChild(makeSVG('line', {
+        x1: xOf(nd), y1: yOf(nd), x2: xOf(c), y2: yOf(c), class: 'tree-edge-highlight'
+      }));
+      highlightLayer.appendChild(makeSVG('circle', {
+        cx: xOf(c), cy: yOf(c), r: nodeRadius + 2.5, class: 'tree-node-child-highlight'
+      }));
+    }
+    describeNode(nd, chain);
+  }
+
+  const frag = document.createDocumentFragment();
+  for (const nd of nodeEls){
+    const cls = 'tree-node ' + (nd.status === 'Y' ? 'tree-node-young' : 'tree-node-mature');
+    const hit = makeSVG('circle', {cx: xOf(nd), cy: yOf(nd), r: hitRadius, class: 'tree-node-hit'});
+    hit.addEventListener('click', () => selectNode(nd));
+    const title = makeSVG('title', {});
+    title.textContent = `Para #${nd.id} — ${nd.status === 'Y' ? 'młoda' : 'dojrzała'} (n=${nd.gen})`;
+    hit.appendChild(title);
+    frag.appendChild(hit);
+
+    const visual = makeSVG('circle', {cx: xOf(nd), cy: yOf(nd), r: nodeRadius, class: cls});
+    visual.style.pointerEvents = 'none';
+    frag.appendChild(visual);
+
+    if (showLabels){
+      const label = makeSVG('text', {
+        x: xOf(nd), y: yOf(nd), class: 'tree-node-label',
+        'font-size': Math.max(7, nodeRadius * 1.2), 'dominant-baseline': 'central'
+      });
+      label.textContent = nd.id;
+      frag.appendChild(label);
+    }
+  }
+  svg.appendChild(frag);
+  svg.appendChild(highlightLayer);
+}
+
+function render(){
+  stepNum.textContent = n;
+  popNum.textContent = seq[n];
+  renderTree();
+  btnBack.disabled = n <= 0;
+  btnStep.disabled = n >= TREE_MAX_N;
+  if (n >= TREE_MAX_N && playing) stopPlay();
+}
+
+function step(){
+  if (n < TREE_MAX_N){ n++; render(); }
+  else stopPlay();
+}
+
+function stepBack(){
+  if (n > 0){ n--; render(); }
+}
+
+function startPlay(){
+  playing = true;
+  btnPlay.textContent = '⏸ Pauza';
+  // suwak: w lewo = wolno (długi interwał), w prawo = szybko
+  timer = setInterval(step, Number(speedRange.min) + Number(speedRange.max) - Number(speedRange.value));
+}
+function stopPlay(){
+  playing = false;
+  btnPlay.textContent = '▶ Odtwórz';
+  clearInterval(timer);
+}
+
+btnPlay.addEventListener('click', () => playing ? stopPlay() : startPlay());
+btnBack.addEventListener('click', () => { stopPlay(); stepBack(); });
+btnStep.addEventListener('click', () => { stopPlay(); step(); });
+btnReset.addEventListener('click', () => { stopPlay(); n = 0; render(); });
+speedRange.addEventListener('input', () => { if (playing){ stopPlay(); startPlay(); } });
+
+// --- Zoom i przesuwanie drzewa ---
+zoomInBtn.addEventListener('click', () => { if (vb) zoomAt(1.3, vb.x + vb.w / 2, vb.y + vb.h / 2); });
+zoomOutBtn.addEventListener('click', () => { if (vb) zoomAt(1 / 1.3, vb.x + vb.w / 2, vb.y + vb.h / 2); });
+zoomFitBtn.addEventListener('click', resetView);
+
+treeSvg.addEventListener('wheel', e => {
+  if (!vb) return;
+  e.preventDefault();
+  const loc = clientToUser(e.clientX, e.clientY);
+  zoomAt(Math.exp(-e.deltaY * 0.0015), loc.x, loc.y);
+}, {passive: false});
+
+let panning = false;
+let lastPan = null;
+
+treeSvg.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || !vb) return;
+  panning = true;
+  didPan = false;
+  lastPan = {x: e.clientX, y: e.clientY};
+});
+
+treeSvg.addEventListener('pointermove', e => {
+  if (!panning || !vb) return;
+  if (!didPan){
+    if (Math.abs(e.clientX - lastPan.x) + Math.abs(e.clientY - lastPan.y) <= 3) return;
+    didPan = true;
+    treeSvg.classList.add('panning');
+    try { treeSvg.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+  const from = clientToUser(lastPan.x, lastPan.y);
+  const to = clientToUser(e.clientX, e.clientY);
+  vb.x += from.x - to.x;
+  vb.y += from.y - to.y;
+  lastPan = {x: e.clientX, y: e.clientY};
+  applyViewBox();
+});
+
+function endPan(e){
+  if (!panning) return;
+  panning = false;
+  treeSvg.classList.remove('panning');
+  try { treeSvg.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+treeSvg.addEventListener('pointerup', endPan);
+treeSvg.addEventListener('pointercancel', endPan);
+
+window.addEventListener('resize', syncAxis);
+
+render();
+</script>
+</body>
+</html>
