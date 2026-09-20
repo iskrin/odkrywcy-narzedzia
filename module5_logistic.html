@@ -9,26 +9,34 @@
     --muted:#8a93a8; --accent:#5ec2ff; --accent2:#ffd166; --good:#6fdb8f;
   }
   *{box-sizing:border-box;}
-  html,body{height:100%;}
   body{
     margin:0; font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text);
-    display:flex; flex-direction:column; align-items:center; height:100vh; overflow:hidden;
-    padding:16px;
+    display:flex; flex-direction:column; align-items:center;
+    padding:24px 16px 60px;
   }
-  h1{font-size:22px; margin:0 0 2px; text-align:center;}
-  .sub{color:var(--muted); margin:0 0 12px; text-align:center; max-width:900px; line-height:1.4; font-size:13px;}
+  h1{font-size:26px; margin:0 0 4px; text-align:center;}
+  .sub{color:var(--muted); margin:0 0 24px; text-align:center; max-width:900px; line-height:1.45; font-size:13px;}
 
   .page{
-    display:flex; flex-direction:column; gap:12px;
-    width:100%; max-width:1500px; flex:1; min-height:0;
+    display:flex; flex-direction:column; gap:16px;
+    width:100%; max-width:1500px;
   }
 
   .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:18px; width:100%;}
   .panel h2{margin:0 0 4px; font-size:16px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em;}
   .panel .desc{color:var(--muted); font-size:13px; margin:0 0 14px;}
 
-  .panel.chart{flex:1; min-height:0; display:flex; flex-direction:column;}
+  .panel.chart{display:flex; flex-direction:column;}
   .panel.chart .desc{margin-bottom:8px;}
+
+  .canvasWrap{
+    position:relative; height:clamp(340px, 52vh, 560px);
+    background:#0a1220; border-radius:8px; overflow:hidden;
+    cursor:grab; touch-action:none;
+  }
+  .canvasWrap.panning{cursor:grabbing;}
+  .canvasWrap canvas{position:absolute; top:0; left:0; width:100%; height:100%; display:block;}
+  #bifOverlay{pointer-events:none;}
 
   button{
     background:var(--accent); color:#0a1220; border:none; padding:9px 16px; border-radius:8px;
@@ -61,18 +69,13 @@
   .regimeBadge .name{font-weight:700; font-size:15px; margin-bottom:4px; display:block; color:var(--accent2);}
 
   svg{width:100%; height:auto; display:block; background:#0a1220; border-radius:8px;}
-  #seriesChart{flex:1 1 0; min-height:0; width:100%;}
+  #seriesChart{width:100%; height:clamp(300px, 42vh, 460px);}
   .grid-line{stroke:var(--border); stroke-width:1;}
   .axis-label{fill:var(--muted); font-size:12px;}
   .series-line{stroke:var(--accent); stroke-width:1.8; fill:none;}
   .series-dot{fill:var(--accent); r:2;}
 
   .formula{text-align:center; font-size:15px; margin-top:10px; color:var(--good); font-family:'Cambria Math',serif;}
-
-  @media(max-height:720px){
-    .sub{display:none;}
-    h1{font-size:20px; margin-bottom:8px;}
-  }
 </style>
 </head>
 <body>
@@ -115,6 +118,17 @@ a w końcu wpaść w chaos deterministyczny. Suwak r steruje wykresem iteracji w
   <p class="desc">x<sub>n</sub> dla n = 0…60, start x<sub>0</sub> = 1/2</p>
   <svg id="seriesChart" viewBox="0 0 1200 560"></svg>
   <div class="formula">x<sub>n</sub> = r · x<sub>n-1</sub> · (1 − x<sub>n-1</sub>)</div>
+</div>
+
+<div class="panel bif">
+  <h2>Diagram bifurkacji</h2>
+  <p class="desc">Dla każdego r: wartości x, między którymi populacja oscyluje po odrzuceniu stanu przejściowego (jedna
+  linia = punkt stały, kilka = cykl, chmura = chaos). Żółta linia śledzi bieżące r. Kółko myszy = zoom, przeciąganie =
+  przesuwanie, dwuklik = reset.</p>
+  <div class="canvasWrap" id="bifWrap">
+    <canvas id="bifBase"></canvas>
+    <canvas id="bifOverlay"></canvas>
+  </div>
 </div>
 
 </div>
@@ -198,6 +212,277 @@ function drawSeriesChart(r){
   }
 }
 
+// ---------- Diagram bifurkacji (canvas z zoomem i przesuwaniem) ----------
+const bifWrap = document.getElementById('bifWrap');
+const bifBase = document.getElementById('bifBase');
+const bifOverlay = document.getElementById('bifOverlay');
+
+const R_FULL_MIN = 0, R_FULL_MAX = 4;
+const MIN_RANGE = 0.0005;
+const BIF_PAD = {L: 46, R: 16, T: 14, B: 28};
+
+let viewMin = R_FULL_MIN, viewMax = R_FULL_MAX;
+let targetMin = viewMin, targetMax = viewMax;
+let bifAnimating = false;
+
+function bifGeometry(){
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.max(320, bifWrap.clientWidth);
+  const H = Math.max(150, bifWrap.clientHeight);
+  if (bifBase.width !== Math.round(W * dpr) || bifBase.height !== Math.round(H * dpr)){
+    bifBase.width = Math.round(W * dpr);
+    bifBase.height = Math.round(H * dpr);
+    bifOverlay.width = bifBase.width;
+    bifOverlay.height = bifBase.height;
+  }
+  return {
+    W, H, dpr,
+    x0: BIF_PAD.L, y0: BIF_PAD.T,
+    w: W - BIF_PAD.L - BIF_PAD.R,
+    h: H - BIF_PAD.T - BIF_PAD.B
+  };
+}
+
+function xForR(r, g){ return g.x0 + ((r - viewMin) / (viewMax - viewMin)) * g.w; }
+
+function clampView(min, max){
+  const range = Math.min(Math.max(max - min, MIN_RANGE), R_FULL_MAX - R_FULL_MIN);
+  let lo = (min + max) / 2 - range / 2;
+  lo = Math.min(Math.max(lo, R_FULL_MIN), R_FULL_MAX - range);
+  return {min: lo, max: lo + range};
+}
+
+function niceStep(range, maxTicks){
+  const raw = range / maxTicks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+}
+
+function tickDecimals(step){
+  return Math.min(4, Math.max(0, Math.ceil(-Math.log10(step))));
+}
+
+const BIF_SS = 2;
+let bifOff = null;
+let bifHist = null;
+let bifImg = null;
+
+function bifParams(range, quality){
+  let SKIP, KEEP;
+  if (range >= 1){ SKIP = 250; KEEP = 220; }
+  else if (range >= 0.1){ SKIP = 600; KEEP = 340; }
+  else if (range >= 0.01){ SKIP = 1200; KEEP = 480; }
+  else { SKIP = 1800; KEEP = 600; }
+  if (quality === 'fast') KEEP = Math.max(140, Math.round(KEEP * 0.35));
+  return {SKIP, KEEP};
+}
+
+function drawBifAttractor(g, quality){
+  const scale = Math.min(g.dpr * BIF_SS, 2.5);
+  const pW = Math.max(1, Math.round(g.w * scale));
+  const pH = Math.max(1, Math.round(g.h * scale));
+  if (!bifOff) bifOff = document.createElement('canvas');
+  if (bifOff.width !== pW || bifOff.height !== pH){
+    bifOff.width = pW;
+    bifOff.height = pH;
+    bifHist = new Uint16Array(pW * pH);
+    bifImg = bifOff.getContext('2d').createImageData(pW, pH);
+  }
+  bifHist.fill(0);
+
+  const range = viewMax - viewMin;
+  const {SKIP, KEEP} = bifParams(range, quality);
+  for (let c = 0; c < pW; c++){
+    const r = viewMin + ((c + 0.5) / pW) * range;
+    let x = X0;
+    for (let i = 0; i < SKIP; i++) x = r * x * (1 - x);
+    for (let i = 0; i < KEEP; i++){
+      x = r * x * (1 - x);
+      let row = (1 - x) * pH;
+      row = row < 0 ? 0 : row >= pH ? pH - 1 : row | 0;
+      bifHist[row * pW + c]++;
+    }
+  }
+
+  const data = bifImg.data;
+  for (let i = 0; i < bifHist.length; i++){
+    const j = i * 4;
+    data[j] = 94;
+    data[j + 1] = 194;
+    data[j + 2] = 255;
+    const v = bifHist[i];
+    data[j + 3] = v ? Math.min(255, 255 * Math.sqrt(v) * 0.62) : 0;
+  }
+
+  const offCtx = bifOff.getContext('2d');
+  offCtx.putImageData(bifImg, 0, 0);
+
+  const ctx = bifBase.getContext('2d');
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(bifOff, 0, 0, pW, pH, g.x0, g.y0, g.w, g.h);
+  ctx.restore();
+}
+
+function drawBifBase(quality){
+  const g = bifGeometry();
+  const ctx = bifBase.getContext('2d');
+  ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  ctx.fillStyle = '#0a1220';
+  ctx.fillRect(0, 0, g.W, g.H);
+
+  ctx.strokeStyle = '#2a3348';
+  ctx.lineWidth = 1;
+  ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+
+  for (let i = 0; i <= 4; i++){
+    const y = g.y0 + (i / 4) * g.h;
+    ctx.beginPath(); ctx.moveTo(g.x0, y); ctx.lineTo(g.x0 + g.w, y); ctx.stroke();
+  }
+
+  const range = viewMax - viewMin;
+  const step = niceStep(range, 6);
+  const dec = tickDecimals(step);
+  ctx.fillStyle = '#8a93a8';
+  ctx.textAlign = 'center';
+  for (let r = Math.ceil(viewMin / step) * step; r <= viewMax + step * 0.001; r += step){
+    const x = xForR(r, g);
+    ctx.beginPath(); ctx.moveTo(x, g.y0); ctx.lineTo(x, g.y0 + g.h); ctx.stroke();
+    ctx.fillText('r=' + r.toFixed(dec), x, g.y0 + g.h + 18);
+  }
+  ctx.textAlign = 'right';
+  ctx.fillText('1.0', g.x0 - 6, g.y0 + 4);
+  ctx.fillText('0.5', g.x0 - 6, g.y0 + g.h / 2 + 4);
+  ctx.fillText('0.0', g.x0 - 6, g.y0 + g.h + 4);
+
+  drawBifAttractor(g, quality);
+}
+
+function drawBifAll(quality){
+  drawBifBase(quality);
+  drawBifOverlay(Number(rSlider.value));
+}
+
+function drawBifOverlay(r){
+  const g = bifGeometry();
+  const ctx = bifOverlay.getContext('2d');
+  ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+  ctx.clearRect(0, 0, g.W, g.H);
+
+  const frac = Math.min(1, Math.max(0, (r - viewMin) / (viewMax - viewMin)));
+  const px = g.x0 + frac * g.w;
+
+  ctx.strokeStyle = '#ffd166';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(px, g.y0); ctx.lineTo(px, g.y0 + g.h); ctx.stroke();
+
+  ctx.fillStyle = '#ffd166';
+  ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = px > g.x0 + g.w - 70 ? 'right' : 'left';
+  ctx.fillText('r=' + r.toFixed(3), px + (ctx.textAlign === 'right' ? -6 : 6), g.y0 + 12);
+}
+
+let bifQueued = false;
+let bifQueuedFull = true;
+
+function queueBifDraw(full){
+  if (full) bifQueuedFull = true;
+  if (bifQueued) return;
+  bifQueued = true;
+  requestAnimationFrame(() => {
+    bifQueued = false;
+    if (bifAnimating) return;
+    const isFull = bifQueuedFull;
+    bifQueuedFull = false;
+    drawBifAll(isFull ? 'full' : 'fast');
+  });
+}
+
+function setView(min, max, animate){
+  const v = clampView(min, max);
+  targetMin = v.min;
+  targetMax = v.max;
+  if (!animate){
+    bifAnimating = false;
+    viewMin = targetMin;
+    viewMax = targetMax;
+    queueBifDraw(true);
+    return;
+  }
+  if (!bifAnimating){
+    bifAnimating = true;
+    requestAnimationFrame(bifAnimStep);
+  }
+}
+
+function bifAnimStep(){
+  if (!bifAnimating) return;
+  const k = 0.3;
+  viewMin += (targetMin - viewMin) * k;
+  viewMax += (targetMax - viewMax) * k;
+  const range = targetMax - targetMin;
+  const settled = Math.abs(targetMin - viewMin) < range * 0.002 &&
+                  Math.abs(targetMax - viewMax) < range * 0.002;
+  if (settled){
+    viewMin = targetMin;
+    viewMax = targetMax;
+    bifAnimating = false;
+    drawBifAll('full');
+  } else {
+    drawBifAll('fast');
+    requestAnimationFrame(bifAnimStep);
+  }
+}
+
+bifWrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = bifWrap.getBoundingClientRect();
+  const plotW = rect.width - BIF_PAD.L - BIF_PAD.R;
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left - BIF_PAD.L) / plotW));
+  const range = targetMax - targetMin;
+  const rCursor = targetMin + frac * range;
+  const newRange = Math.min(Math.max(range * Math.exp(e.deltaY * 0.0012), MIN_RANGE), R_FULL_MAX - R_FULL_MIN);
+  const lo = rCursor - (rCursor - targetMin) * (newRange / range);
+  setView(lo, lo + newRange, true);
+}, {passive:false});
+
+let bifDrag = null;
+
+bifWrap.addEventListener('pointerdown', (e) => {
+  bifAnimating = false;
+  targetMin = viewMin;
+  targetMax = viewMax;
+  bifDrag = {x: e.clientX, min: viewMin, max: viewMax};
+  bifWrap.setPointerCapture(e.pointerId);
+  bifWrap.classList.add('panning');
+});
+
+bifWrap.addEventListener('pointermove', (e) => {
+  if (!bifDrag) return;
+  const rect = bifWrap.getBoundingClientRect();
+  const plotW = rect.width - BIF_PAD.L - BIF_PAD.R;
+  const shift = ((e.clientX - bifDrag.x) / plotW) * (bifDrag.max - bifDrag.min);
+  const v = clampView(bifDrag.min - shift, bifDrag.max - shift);
+  viewMin = targetMin = v.min;
+  viewMax = targetMax = v.max;
+  queueBifDraw(false);
+});
+
+function endBifDrag(){
+  if (!bifDrag) return;
+  bifDrag = null;
+  bifWrap.classList.remove('panning');
+  queueBifDraw(true);
+}
+bifWrap.addEventListener('pointerup', endBifDrag);
+bifWrap.addEventListener('pointercancel', endBifDrag);
+
+bifWrap.addEventListener('dblclick', () => setView(R_FULL_MIN, R_FULL_MAX, true));
+
+new ResizeObserver(() => queueBifDraw(true)).observe(bifWrap);
+
 function updateRegime(r){
   const {name, desc} = classify(r);
   regimeName.textContent = name;
@@ -209,6 +494,7 @@ function render(){
   rBigVal.textContent = r.toFixed(3);
   drawSeriesChart(r);
   updateRegime(r);
+  drawBifOverlay(r);
 
   document.querySelectorAll('.preset').forEach(btn => {
     btn.classList.toggle('activePreset', Math.abs(Number(btn.dataset.r) - r) < 0.0005);
@@ -231,6 +517,7 @@ window.addEventListener('resize', () => {
   resizeTimer = setTimeout(render, 120);
 });
 
+drawBifBase('full');
 render();
 </script>
 </body>
