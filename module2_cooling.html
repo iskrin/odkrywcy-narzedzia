@@ -26,6 +26,8 @@
   button:disabled{opacity:.4; cursor:default;}
   .sliderGroup{display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px;}
   input[type=range]{accent-color:var(--accent);}
+  .toggleAnim{display:flex; align-items:center; gap:7px; color:var(--muted); font-size:13px; cursor:pointer; user-select:none;}
+  .toggleAnim input{accent-color:var(--accent); width:16px; height:16px; cursor:pointer;}
   .step-badge{
     margin-left:auto; background:#0a1220; border:1px solid var(--border); border-radius:8px;
     padding:8px 16px; font-variant-numeric:tabular-nums; font-size:14px;
@@ -84,6 +86,7 @@ temperatury otoczenia.</p>
     Prędkość:
     <input type="range" id="speedRange" min="150" max="1500" value="1200" step="50">
   </div>
+  <label class="toggleAnim"><input type="checkbox" id="noAnim"> Wyłącz animacje</label>
   <div class="step-badge">Krok n = <b id="stepNum">0</b></div>
 </div>
 
@@ -132,6 +135,7 @@ const MAX_N = 40;
 let n = 0;
 let playing = false;
 let timer = null;
+let animOff = false;
 
 const stepNum = document.getElementById('stepNum');
 const btnPlay = document.getElementById('btnPlay');
@@ -139,6 +143,7 @@ const btnBack = document.getElementById('btnBack');
 const btnStep = document.getElementById('btnStep');
 const btnReset = document.getElementById('btnReset');
 const speedRange = document.getElementById('speedRange');
+const noAnim = document.getElementById('noAnim');
 
 const kSlider = document.getElementById('kSlider');
 const kVal = document.getElementById('kVal');
@@ -183,8 +188,10 @@ function render(){
 
   drawChart(seq, amb, isCold);
 
-  btnBack.disabled = n <= 0;
-  btnStep.disabled = n >= MAX_N;
+  btnPlay.disabled = animOff;
+  btnBack.disabled = animOff || n <= 0;
+  btnStep.disabled = animOff || n >= MAX_N;
+  btnReset.disabled = animOff;
   if (n >= MAX_N && playing) stopPlay();
 }
 
@@ -254,7 +261,17 @@ btnStep.addEventListener('click', () => { stopPlay(); step(); });
 btnReset.addEventListener('click', () => { stopPlay(); n = 0; render(); });
 speedRange.addEventListener('input', () => { if (playing){ stopPlay(); startPlay(); } });
 
-[kSlider, ambSlider, hotStartSlider].forEach(s => s.addEventListener('input', () => { stopPlay(); n = 0; render(); }));
+noAnim.addEventListener('change', () => {
+  animOff = noAnim.checked;
+  stopPlay();
+  n = animOff ? MAX_N : 0;
+  render();
+});
+
+[kSlider, ambSlider, hotStartSlider].forEach(s => s.addEventListener('input', () => {
+  if (!animOff){ stopPlay(); n = 0; }
+  render();
+}));
 
 render();
 </script>

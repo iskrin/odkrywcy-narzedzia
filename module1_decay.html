@@ -28,8 +28,6 @@
   svg{width:100%; height:auto; display:block; background:#0a1220; border-radius:8px;}
   .grid-line{stroke:var(--border); stroke-width:1;}
   .axis-label{fill:var(--muted); font-size:14px;}
-  .half-line{stroke:var(--accent2); stroke-width:2; stroke-dasharray:7 6;}
-  .half-text{fill:var(--accent2); font-size:15px; font-weight:600;}
   .decay-line{stroke:var(--accent); stroke-width:3; fill:none;}
   .decay-dot{fill:var(--accent); stroke:#0a1220; stroke-width:1.5;}
   .zero-line{stroke:var(--good); stroke-width:2; stroke-dasharray:3 4;}
@@ -48,41 +46,61 @@
 
 <h1>☢️ Czas połowicznego rozpadu</h1>
 <p class="sub">Startujemy od x<sub>0</sub> = 1 — jeden „zapas” atomów węgla <sup>14</sup>C. W każdym kroku zostaje stały
-ułamek q poprzedniego stanu, a reszta się rozpada. Dla q &lt; 1 zero jest punktem, do którego system nieuchronnie
+współczynnik r poprzedniego stanu, a reszta się rozpada. Dla r &lt; 1 zero jest punktem, do którego system nieuchronnie
 zmierza — <b>atraktorem</b>.</p>
 
 <div class="controls">
   <div class="sliderGroup">
-    współczynnik q:
-    <input type="range" id="qSlider" min="0.01" max="1" step="0.01" value="0.9">
-    <b id="qVal">0.90</b>
+    parametr r:
+    <input type="range" id="rSlider" min="0" max="2" step="0.01" value="0.9">
+    <b id="rVal">0.90</b>
   </div>
 </div>
 
 <div class="panel">
   <h2>Zanik wykładniczy</h2>
   <svg id="decayChart" viewBox="0 0 1000 440"></svg>
-  <div class="formula">x<sub>n</sub> = q · x<sub>n-1</sub>, &nbsp; x<sub>0</sub> = 1</div>
+  <div class="formula">x<sub>n</sub> = r · x<sub>n-1</sub>, &nbsp; x<sub>0</sub> = 1</div>
   <div class="attractorNote">
-    Dla q &lt; 1 populacja nieuchronnie dąży do <b>zera</b> — im mniejsze q, tym szybciej.
-    Gdy q = 1, stan się nie zmienia i wykres pozostaje na poziomie 1.
+    Dla r &lt; 1 populacja nieuchronnie dąży do <b>zera</b> — im mniejsze r, tym szybciej (dla r = 0.5 mamy
+    dokładnie czas połowicznego rozpadu węgla <sup>14</sup>C). Gdy r = 1, stan się nie zmienia, a dla r &gt; 1
+    populacja rośnie wykładniczo — zero przestaje być atraktorem.
   </div>
 </div>
 
 <script>
 const X0 = 1;
 const MAX_N = 60;
+const Y_MIN_TOP = 2;
 
-let q = 0.9;
+let r = 0.9;
 
-const qSlider = document.getElementById('qSlider');
-const qVal = document.getElementById('qVal');
+const rSlider = document.getElementById('rSlider');
+const rVal = document.getElementById('rVal');
 const decayChart = document.getElementById('decayChart');
 
-function seriesFor(q, upTo){
+function seriesFor(r, upTo){
   const arr = [X0];
-  for (let i = 1; i <= upTo; i++) arr.push(arr[i - 1] * q);
+  for (let i = 1; i <= upTo; i++) arr.push(arr[i - 1] * r);
   return arr;
+}
+
+function formatValue(v){
+  if (v < 1000) return {text: Number.isInteger(v) ? String(v) : v.toFixed(2)};
+  const [mantissa, exp] = v.toExponential(1).split('e');
+  return {text: mantissa + ' × 10', exponent: String(Number(exp))};
+}
+
+function makeValueLabel(v, attrs){
+  const label = formatValue(v);
+  const el = makeSVG('text', attrs);
+  el.textContent = label.text;
+  if (label.exponent){
+    const sup = makeSVG('tspan', {'baseline-shift':'super', 'font-size':'11'});
+    sup.textContent = label.exponent;
+    el.appendChild(sup);
+  }
+  return el;
 }
 
 function makeSVG(tag, attrs){
@@ -94,10 +112,10 @@ function makeSVG(tag, attrs){
 function renderChart(seq){
   decayChart.innerHTML = '';
   const W = 1000, H = 440, padL = 70, padR = 26, padT = 26, padB = 58;
-  const maxVal = X0;
+  const axisMax = Math.max(Y_MIN_TOP, Math.max(...seq));
   const last = seq.length - 1;
   const xFor = i => padL + (i / last) * (W - padL - padR);
-  const yFor = v => H - padB - (v / maxVal) * (H - padT - padB);
+  const yFor = v => H - padB - (v / axisMax) * (H - padT - padB);
 
   for (let g = 0; g <= 4; g++){
     const y = padT + g * (H - padT - padB) / 4;
@@ -118,13 +136,6 @@ function renderChart(seq){
     decayChart.appendChild(tick);
   }
 
-  // linia połowy stanu
-  const halfY = yFor(maxVal / 2);
-  decayChart.appendChild(makeSVG('line', {x1:padL, y1:halfY, x2:W-padR, y2:halfY, class:'half-line'}));
-  const halfText = makeSVG('text', {x:W-padR, y:halfY-6, class:'half-text', 'text-anchor':'end'});
-  halfText.textContent = '50% (0.5)';
-  decayChart.appendChild(halfText);
-
   // linia zera / atraktora
   const zeroY = yFor(0);
   decayChart.appendChild(makeSVG('line', {x1:padL, y1:zeroY, x2:W-padR, y2:zeroY, class:'zero-line'}));
@@ -132,7 +143,7 @@ function renderChart(seq){
   zeroText.textContent = 'atraktor: 0';
   decayChart.appendChild(zeroText);
 
-  decayChart.appendChild(makeSVG('text', {x:8, y:padT+6, class:'axis-label'})).textContent = '1';
+  decayChart.appendChild(makeValueLabel(axisMax, {x:8, y:padT+6, class:'axis-label'}));
   decayChart.appendChild(makeSVG('text', {x:8, y:H-padB, class:'axis-label'})).textContent = '0';
 
   let path = '';
@@ -148,13 +159,13 @@ function renderChart(seq){
 }
 
 function render(){
-  const seq = seriesFor(q, MAX_N);
+  const seq = seriesFor(r, MAX_N);
   renderChart(seq);
 }
 
-qSlider.addEventListener('input', () => {
-  q = Number(qSlider.value);
-  qVal.textContent = q.toFixed(2);
+rSlider.addEventListener('input', () => {
+  r = Number(rSlider.value);
+  rVal.textContent = r.toFixed(2);
   render();
 });
 
